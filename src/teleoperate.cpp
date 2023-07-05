@@ -3,6 +3,7 @@
 #include <iostream>
 
 #include "ros/ros.h"
+#include "ros/package.h"
 #include "geometry_msgs/TwistStamped.h"
 #include "yaml-cpp/yaml.h"
 
@@ -14,9 +15,11 @@ class OmniStateToTwist
 public:
     static const int NUM_SPINNERS = 1;
     static const int QUEUE_LENGTH = 1;
-
+    static const std::string package_name;
     OmniStateToTwist() : spinner_(NUM_SPINNERS)
     {
+        std::string config_location = ros::package::getPath(package_name) + "/config/servo_config.yaml";
+        config_ = YAML::LoadFile(config_location);
         ros::param::get("/omni_state/omni_name", omni_name_);
         omni_sub_ = n_.subscribe(omni_name_ + "/state", QUEUE_LENGTH, &OmniStateToTwist::omniCallback, this);
         button_sub_ = n_.subscribe(omni_name_ + "/button", QUEUE_LENGTH, &OmniStateToTwist::buttonCallback, this);
@@ -49,48 +52,46 @@ private:
         if (movement_active_)
         {
             double dt = (twist.header.stamp - last_processed_time_).toSec();
-            twist.twist.angular = quaternionPosesToAngularVelocity(last_orientation_, msg->pose.orientation, dt);
             twist.twist.linear = transformAndScaleLinearVelocities(msg->velocity);
+            twist.twist.angular = quaternionPosesToAngularVelocity(last_orientation_, msg->pose.orientation, dt);
+            twist_pub_.publish(twist);
         }
         // movement disabled
-        else
-        {
-            twist.twist.angular.x = 0;
-            twist.twist.angular.y = 0;
-            twist.twist.angular.z = 0;
-            twist.twist.linear.x = 0;
-            twist.twist.linear.y = 0;
-            twist.twist.linear.z = 0;
-        }
         // TODO check if this copy works
         last_processed_time_ = twist.header.stamp;
         last_orientation_ = msg->pose.orientation;
-        
-        twist_pub_.publish(twist);
     }
     
     // q1 is at time t, q2 is at time t + dt, dt in seconds
     // from https://mariogc.com/post/angular-velocity-quaternions/ 
     geometry_msgs::Vector3 quaternionPosesToAngularVelocity(const geometry_msgs::Quaternion& q1, const geometry_msgs::Quaternion& q2, double dt) {        
+        // EXPERIMENTAL: Account for encoder error, if the new data's difference to old in tiny, take it the same as old.
+        geometry_msgs::Quaternion q2_rounded;
+        q2_rounded.x = (abs(q1.x - q2.x) < orientation_epsilon_) ? q1.x : q2.x;
+        q2_rounded.y = (abs(q1.y - q2.y) < orientation_epsilon_) ? q1.y : q2.y;
+        q2_rounded.z = (abs(q1.z - q2.z) < orientation_epsilon_) ? q1.z : q2.z;
+        q2_rounded.w = (abs(q1.w - q2.w) < orientation_epsilon_) ? q1.w : q2.w;
+
         geometry_msgs::Vector3 angular_velocity;
-        angular_velocity.x = (2 / dt) * (q1.w * q2.x - q1.x * q2.w - q1.y * q2.z + q1.z * q2.y);
-        angular_velocity.y = (2 / dt) * (q1.w * q2.y + q1.x * q2.z - q1.y + q2.w - q1.z * q2.x);
-        angular_velocity.z = (2 / dt) * (q1.w * q2.z - q1.x * q2.y + q1.y * q2.x - q1.z * q2.w);
+        angular_velocity.x = (2.0 / dt) * (q1.w * q2_rounded.x - q1.x * q2_rounded.w - q1.y * q2_rounded.z + q1.z * q2_rounded.y);
+        angular_velocity.y = (2.0 / dt) * (q1.w * q2_rounded.y + q1.x * q2_rounded.z - q1.y * q2_rounded.w - q1.z * q2_rounded.x);
+        angular_velocity.z = (2.0 / dt) * (q1.w * q2_rounded.z - q1.x * q2_rounded.y + q1.y * q2_rounded.x - q1.z * q2_rounded.w);
+        
         return angular_velocity;
     }
 
     // WIP
     geometry_msgs::Vector3 transformAndScaleLinearVelocities(const geometry_msgs::Vector3& touch_velocity) {
         geometry_msgs::Vector3 rotated_velocities;
-        
         // TODO: transform and scale here
-        rotated_velocities.x = touch_velocity.x;
-        rotated_velocities.y = touch_velocity.y;
-        rotated_velocities.z = touch_velocity.z;
+        
+        // Experimental rounding, if Touch velocity less than a tiny number, set it to 0.
+        rotated_velocities.x = (abs(touch_velocity.x) < velocity_epsilon_) ? 0.0 : touch_velocity.x;
+        rotated_velocities.y = (abs(touch_velocity.y) < velocity_epsilon_) ? 0.0 : touch_velocity.y;
+        rotated_velocities.z = (abs(touch_velocity.z) < velocity_epsilon_) ? 0.0 : touch_velocity.z;
 
         return rotated_velocities;    
     }
-
 
     ros::NodeHandle n_;
     ros::Subscriber omni_sub_;
@@ -99,11 +100,22 @@ private:
     ros::AsyncSpinner spinner_;
     std::string omni_name_;
         
-
-    std::string config_file_ = "../config/servo_config.yaml";
-    YAML::Node config_ = YAML::LoadFile(config_file_);
+    YAML::Node config_;
 
     ros::Time last_processed_time_;
     geometry_msgs::Quaternion last_orientation_;
+
+    // Calculated empirically by observing the change in values with no movement
+    double orientation_epsilon_ = 7.0e-4;
+    double velocity_epsilon_ = 1.0e-4;
+
     bool movement_active_;
 };
+
+
+const std::string OmniStateToTwist::package_name = "ur_to_touch_haptic_teleoperation";
+int main(int argc, char** argv)
+{
+    ros::init(argc, argv, OmniStateToTwist::package_name);
+    OmniStateToTwist to_twist;
+}
