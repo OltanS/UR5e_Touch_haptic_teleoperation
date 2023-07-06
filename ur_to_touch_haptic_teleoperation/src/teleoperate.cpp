@@ -55,6 +55,7 @@ private:
             twist.twist.linear = transformAndScaleLinearVelocities(msg->velocity);
             twist.twist.angular = quaternionPosesToAngularVelocity(last_orientation_, msg->pose.orientation, dt);
             roundTwistToPrecision(twist, precision_);
+            transformTwistToUrFrame(twist);
             twist_pub_.publish(twist);
         }
         // movement disabled
@@ -62,7 +63,20 @@ private:
         last_processed_time_ = twist.header.stamp;
         last_orientation_ = msg->pose.orientation;
     }
-    
+    /*
+    This transformation can be done via a 3rd party library for more complicated situations
+    However, the mapping for this situation is deeply simple, and can thus be trivially done by hand
+    by swapping some values around. The swaps have been determined empirically
+    */
+    void transformTwistToUrFrame(geometry_msgs::TwistStamped& twist) {
+        double temp_x = twist.twist.linear.x;
+        double temp_y = twist.twist.linear.y;
+
+        twist.twist.linear.x = -temp_y;
+        twist.twist.linear.y = temp_x;
+        // Z stays as is
+    }
+
     // round to given precision to combat noise
     void roundTwistToPrecision(geometry_msgs::TwistStamped& twist, const double& precision) {
         twist.twist.angular.x = std::round(twist.twist.angular.x * precision) / precision;
