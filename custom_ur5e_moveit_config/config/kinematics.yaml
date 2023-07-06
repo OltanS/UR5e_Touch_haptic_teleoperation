@@ -1,0 +1,7 @@
+my_ur5e_group:
+  kinematics_solver: ur_kinematics/UR5eKinematicsPlugin
+  kinematics_solver_search_resolution: 0.005
+  kinematics_solver_timeout: 0.005
+  goal_joint_tolerance: 0.0001
+  goal_position_tolerance: 0.0001
+  goal_orientation_tolerance: 0.001

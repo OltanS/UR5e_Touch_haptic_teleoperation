@@ -32,6 +32,7 @@
         <arg name="controllers" default="joint_state_controller speed_scaling_state_controller force_torque_sensor_controller joint_group_vel_controller"/>
         <arg name="stopped_controllers" default="pos_joint_traj_controller scaled_pos_joint_traj_controller"/>
         <arg name="kinematics_config" default="$(find ur_to_touch_haptic_teleoperation)/config/my_robot_calibration.yaml"/>
+        <arg name="headless_mode" default="true"/>
   </include>
 
   <node name="servo_server" pkg="moveit_servo" type="servo_server" output="screen">
