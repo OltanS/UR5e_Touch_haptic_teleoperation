@@ -38,7 +38,7 @@
   <node name="servo_server" pkg="moveit_servo" type="servo_server" output="screen">
     <rosparam command="load" file="$(arg config)"/>
   </node>
-  <include file="$(find ur5e_moveit_config)/launch/moveit_planning_execution.launch">
+  <include file="$(find custom_ur5e_moveit_config)/launch/my_moveit_launch.launch">
     <arg name="debug" value="$(arg debug)"/>
   </include>
 -->
