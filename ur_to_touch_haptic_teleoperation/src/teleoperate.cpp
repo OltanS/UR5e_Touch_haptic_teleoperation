@@ -54,6 +54,7 @@ private:
             double dt = (twist.header.stamp - last_processed_time_).toSec();
             twist.twist.linear = transformAndScaleLinearVelocities(msg->velocity);
             twist.twist.angular = quaternionPosesToAngularVelocity(last_orientation_, msg->pose.orientation, dt);
+            roundTwistToPrecision(twist, precision_);
             twist_pub_.publish(twist);
         }
         // movement disabled
@@ -62,6 +63,16 @@ private:
         last_orientation_ = msg->pose.orientation;
     }
     
+    // round to given precision to combat noise
+    void roundTwistToPrecision(geometry_msgs::TwistStamped& twist, const double& precision) {
+        twist.twist.angular.x = std::round(twist.twist.angular.x * precision) / precision;
+        twist.twist.angular.y = std::round(twist.twist.angular.y * precision) / precision;
+        twist.twist.angular.z = std::round(twist.twist.angular.z * precision) / precision;
+        twist.twist.linear.x = std::round(twist.twist.linear.x * precision) / precision;
+        twist.twist.linear.y = std::round(twist.twist.linear.y * precision) / precision;
+        twist.twist.linear.z = std::round(twist.twist.linear.z * precision) / precision;
+    }
+
     // q1 is at time t, q2 is at time t + dt, dt in seconds
     // from https://mariogc.com/post/angular-velocity-quaternions/ 
     geometry_msgs::Vector3 quaternionPosesToAngularVelocity(const geometry_msgs::Quaternion& q1, const geometry_msgs::Quaternion& q2, double dt) {        
@@ -77,6 +88,8 @@ private:
         angular_velocity.y = (2.0 / dt) * (q1.w * q2_rounded.y + q1.x * q2_rounded.z - q1.y * q2_rounded.w - q1.z * q2_rounded.x);
         angular_velocity.z = (2.0 / dt) * (q1.w * q2_rounded.z - q1.x * q2_rounded.y + q1.y * q2_rounded.x - q1.z * q2_rounded.w);
         
+
+
         return angular_velocity;
     }
 
@@ -108,6 +121,9 @@ private:
     // Calculated empirically by observing the change in values with no movement
     double orientation_epsilon_ = 7.0e-4;
     double velocity_epsilon_ = 1.0e-4;
+
+    // Means that 2 values after the decimal are taken, to combat noise
+    double precision_ = 100.0;
 
     bool movement_active_;
 };
