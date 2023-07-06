@@ -18,12 +18,20 @@ public:
     static const std::string package_name;
     OmniStateToTwist() : spinner_(NUM_SPINNERS)
     {
-        std::string config_location = ros::package::getPath(package_name) + "/config/servo_config.yaml";
-        config_ = YAML::LoadFile(config_location);
+        std::string teleop_config_location = ros::package::getPath(package_name) + "/config/teleop_config.yaml";
+        teleop_config_ = YAML::LoadFile(teleop_config_location);
+        orientation_epsilon_ = teleop_config_["orientation_epsilon"].as<double>();
+        velocity_epsilon_ = teleop_config_["velocity_epsilon"].as<double>();
+        precision_ = teleop_config_["precision"].as<int>();
+        movement_scale_ = teleop_config_["movement_scale"].as<double>();
+
         ros::param::get("/omni_state/omni_name", omni_name_);
         omni_sub_ = n_.subscribe(omni_name_ + "/state", QUEUE_LENGTH, &OmniStateToTwist::omniCallback, this);
         button_sub_ = n_.subscribe(omni_name_ + "/button", QUEUE_LENGTH, &OmniStateToTwist::buttonCallback, this);
-        twist_pub_ = n_.advertise<geometry_msgs::TwistStamped>("servo_server/" + config_["cartesian_command_in_topic"].as<std::string>(), QUEUE_LENGTH); 
+        
+        std::string servo_config_location = ros::package::getPath(package_name) + "/config/servo_config.yaml";
+        servo_config_ = YAML::LoadFile(servo_config_location);
+        twist_pub_ = n_.advertise<geometry_msgs::TwistStamped>("servo_server/" + servo_config_["cartesian_command_in_topic"].as<std::string>(), QUEUE_LENGTH); 
         
         // Slightly hack-y, assumes the activation button is not pressed before an initial reading can be done.
         // initialized so that the program does not crash if they have not been
@@ -55,6 +63,7 @@ private:
             twist.twist.linear = transformAndScaleLinearVelocities(msg->velocity);
             twist.twist.angular = quaternionPosesToAngularVelocity(last_orientation_, msg->pose.orientation, dt);
             roundTwistToPrecision(twist, precision_);
+            scaleTwist(twist, movement_scale_);
             transformTwistToUrFrame(twist);
             twist_pub_.publish(twist);
         }
@@ -63,6 +72,15 @@ private:
         last_processed_time_ = twist.header.stamp;
         last_orientation_ = msg->pose.orientation;
     }
+    void scaleTwist(geometry_msgs::TwistStamped& twist, double scale) {
+        twist.twist.linear.x *= scale;
+        twist.twist.linear.y *= scale;
+        twist.twist.linear.z *= scale;
+        twist.twist.angular.x *= scale;
+        twist.twist.angular.y *= scale;
+        twist.twist.angular.z *= scale;
+    }
+
     /*
     This transformation can be done via a 3rd party library for more complicated situations
     However, the mapping for this situation is deeply simple, and can thus be trivially done by hand
@@ -79,12 +97,13 @@ private:
 
     // round to given precision to combat noise
     void roundTwistToPrecision(geometry_msgs::TwistStamped& twist, const double& precision) {
-        twist.twist.angular.x = std::round(twist.twist.angular.x * precision) / precision;
-        twist.twist.angular.y = std::round(twist.twist.angular.y * precision) / precision;
-        twist.twist.angular.z = std::round(twist.twist.angular.z * precision) / precision;
-        twist.twist.linear.x = std::round(twist.twist.linear.x * precision) / precision;
-        twist.twist.linear.y = std::round(twist.twist.linear.y * precision) / precision;
-        twist.twist.linear.z = std::round(twist.twist.linear.z * precision) / precision;
+        double multiplier = pow(10, precision);
+        twist.twist.angular.x = std::round(twist.twist.angular.x * multiplier) / multiplier;
+        twist.twist.angular.y = std::round(twist.twist.angular.y * multiplier) / multiplier;
+        twist.twist.angular.z = std::round(twist.twist.angular.z * multiplier) / multiplier;
+        twist.twist.linear.x = std::round(twist.twist.linear.x * multiplier) / multiplier;
+        twist.twist.linear.y = std::round(twist.twist.linear.y * multiplier) / multiplier;
+        twist.twist.linear.z = std::round(twist.twist.linear.z * multiplier) / multiplier;
     }
 
     // q1 is at time t, q2 is at time t + dt, dt in seconds
@@ -127,19 +146,24 @@ private:
     ros::AsyncSpinner spinner_;
     std::string omni_name_;
         
-    YAML::Node config_;
+    // relates to the config required by moveit_servo
+    YAML::Node servo_config_;
+    // relates to the config required by this file
+    YAML::Node teleop_config_;
 
     ros::Time last_processed_time_;
     geometry_msgs::Quaternion last_orientation_;
-
-    // Calculated empirically by observing the change in values with no movement
-    double orientation_epsilon_ = 7.0e-4;
-    double velocity_epsilon_ = 1.0e-4;
-
-    // Means that 2 values after the decimal are taken, to combat noise
-    double precision_ = 100.0;
-
     bool movement_active_;
+
+    //TODO: pull these from a config instead
+    // Calculated empirically by observing the change in values with no movement
+    double orientation_epsilon_;
+    double velocity_epsilon_;
+    // Means that 2 values after the decimal are taken, to combat noise
+    int precision_;
+    // allow for precise movement
+    double movement_scale_;
+
 };
 
 

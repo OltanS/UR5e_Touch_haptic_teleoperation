@@ -1,0 +1,8 @@
+# anything less than this is discarded for noise reduction
+orientation_epsilon : 1.0E-3
+# anything less is filtered for noise reduction
+velocity_epsilon : 1.0E-3
+# how many decimal places are taken for velocities, for noise reduction
+precision: 2
+# this scale multiplies the velocities created on the touch
+movement_scale : 0.25
