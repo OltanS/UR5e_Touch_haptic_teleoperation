@@ -24,23 +24,4 @@
 
   <node name="ur_to_touch_haptic_teleoperation_node" pkg="ur_to_touch_haptic_teleoperation" type="ur_to_touch_haptic_teleoperation_node" output="screen" />
  
-
-  <include file="$(find ur_robot_driver)/launch/ur5e_bringup.launch">
-        <arg name="debug" value="$(arg debug)"/>
-        <arg name="robot_ip" default="192.168.0.100"/>
-        <arg name="controllers" default="joint_state_controller speed_scaling_state_controller force_torque_sensor_controller joint_group_vel_controller"/>
-        <arg name="stopped_controllers" default="pos_joint_traj_controller scaled_pos_joint_traj_controller"/>
-        <arg name="kinematics_config" default="$(find ur_to_touch_haptic_teleoperation)/config/my_robot_calibration.yaml"/>
-        <arg name="headless_mode" default="true"/>
-  </include>
-
-  <node name="servo_server" pkg="moveit_servo" type="servo_server" output="screen">
-    <rosparam command="load" file="$(arg config)"/>
-  </node>
-  <include file="$(find custom_ur5e_moveit_config)/launch/my_moveit_launch.launch">
-    <arg name="debug" value="$(arg debug)"/>
-  </include>
-<!--
--->
-
 </launch>

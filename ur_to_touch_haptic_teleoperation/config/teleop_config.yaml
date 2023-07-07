@@ -1,4 +1,6 @@
 # any Touch velocity reading less than this (in absolute value) is discarded for noise reduction
-min_velocity : 0.020
+deadband : 0.020
 # this scale multiplies the velocities created on the touch
 movement_scale : 0.5
+# number of consecutive nonzero messages required for a non-zero velocity 
+consecutive_nonzero : 9

@@ -1,8 +1,10 @@
 #include <iostream>
 #include "yaml-cpp/yaml.h"
+#include "boost/circular_buffer.hpp"
 
 #include "ros/ros.h"
 #include "ros/package.h"
+
 
 #include "geometry_msgs/TwistStamped.h"
 #include "omni_msgs/OmniState.h"
@@ -19,7 +21,8 @@ public:
         std::string teleop_config_location = ros::package::getPath(package_name) + "/config/teleop_config.yaml";
         teleop_config_ = YAML::LoadFile(teleop_config_location);
         movement_scale_ = teleop_config_["movement_scale"].as<double>();
-        min_velocity_ = teleop_config_["min_velocity"].as<double>();
+        deadband_ = teleop_config_["deadband"].as<double>();
+        consecutive_nonzero_ = teleop_config_["consecutive_nonzero"].as<int>();
 
         ros::param::get("/omni_state/omni_name", omni_name_);
         omni_sub_ = n_.subscribe(omni_name_ + "/state", QUEUE_LENGTH, &OmniStateToTwist::omniCallback, this);
@@ -29,6 +32,8 @@ public:
         servo_config_ = YAML::LoadFile(servo_config_location);
         twist_pub_ = n_.advertise<geometry_msgs::TwistStamped>("servo_server/" + servo_config_["cartesian_command_in_topic"].as<std::string>(), QUEUE_LENGTH); 
         
+        previous_proposed_twists_.set_capacity(consecutive_nonzero_);
+
         // Slightly hack-y, assumes the activation button is not pressed before an initial reading can be done.
         // initialized so that the program does not crash if they have not been
         last_processed_time_ = ros::Time::now();
@@ -42,7 +47,6 @@ public:
         spinner_.start();
         ros::waitForShutdown();
     }
-
 
 private:
     void buttonCallback(const omni_msgs::OmniButtonEvent::ConstPtr& msg) {
@@ -59,17 +63,56 @@ private:
             double dt = (callbackTime - last_processed_time_).toSec();
             twist.twist.linear = geometry_msgs::Vector3(msg->velocity);
             twist.twist.angular = quaternionPosesToAngularVelocity(last_orientation_, msg->pose.orientation, dt);
-            filterNoise(twist, min_velocity_);
+            deadbandFilterNoise(twist, deadband_);
+            previousMovementFilterNoise(twist, consecutive_nonzero_);
             scaleTwist(twist, movement_scale_);
             transformTwistToUrFrame(twist);
             twist_pub_.publish(twist);
-
         }
-
+        ROS_INFO_THROTTLE(10, "omniCallback Processing took %.5fms. Max processing time allowed is 1ms for 1000 hz.", ((ros::Time::now() - callbackTime).toSec() * 1000));
         last_processed_time_ = callbackTime;
         last_orientation_ = msg->pose.orientation;
     }
+
+    // q1 is at time t, q2 is at time t + dt, dt in seconds
+    // from https://mariogc.com/post/angular-velocity-quaternions/ 
+    geometry_msgs::Vector3 quaternionPosesToAngularVelocity(const geometry_msgs::Quaternion& q1, const geometry_msgs::Quaternion& q2, double dt) {        
+        geometry_msgs::Vector3 angular_velocity;
+        angular_velocity.x = (2.0 / dt) * (q1.w * q2.x - q1.x * q2.w - q1.y * q2.z + q1.z * q2.y);
+        angular_velocity.y = (2.0 / dt) * (q1.w * q2.y + q1.x * q2.z - q1.y * q2.w - q1.z * q2.x);
+        angular_velocity.z = (2.0 / dt) * (q1.w * q2.z - q1.x * q2.y + q1.y * q2.x - q1.z * q2.w);
+        return angular_velocity;
+    }
     
+    // discard any velocity less than a configured minimum
+    void deadbandFilterNoise(geometry_msgs::TwistStamped& twist, const double& deadband) {
+        if (abs(twist.twist.linear.x) < deadband) {twist.twist.linear.x = 0.0; }
+        if (abs(twist.twist.linear.y) < deadband) {twist.twist.linear.y = 0.0; }
+        if (abs(twist.twist.linear.z) < deadband) {twist.twist.linear.z = 0.0; }
+        if (abs(twist.twist.angular.x) < deadband) {twist.twist.angular.x = 0.0; }
+        if (abs(twist.twist.angular.y) < deadband) {twist.twist.angular.y = 0.0; }
+        if (abs(twist.twist.angular.z) < deadband) {twist.twist.angular.z = 0.0; }
+    }
+
+    /*
+    If the value for any velocity is not nonzero for any of the previous (consecutive_nonzero) messages
+    set it to 0.
+    This is applied after the deadband filtering.
+    The previous message values are saved before setting to 0 to prevent infinite loops of just 0.
+    */
+    void previousMovementFilterNoise(geometry_msgs::TwistStamped& twist, const int& consecutive_nonzero) {
+        geometry_msgs::TwistStamped twistCopy(twist);
+        for (auto const& prev : previous_proposed_twists_) {
+            if (prev.twist.linear.x == 0.0) {twist.twist.linear.x = 0.0;}
+            if (prev.twist.linear.y == 0.0) {twist.twist.linear.y = 0.0;}
+            if (prev.twist.linear.z == 0.0) {twist.twist.linear.z = 0.0;}
+            if (prev.twist.angular.x == 0.0) {twist.twist.angular.x = 0.0;}
+            if (prev.twist.angular.y == 0.0) {twist.twist.angular.y = 0.0;}
+            if (prev.twist.angular.z == 0.0) {twist.twist.angular.z = 0.0;}
+        }
+        previous_proposed_twists_.push_back(twistCopy);
+    }
+
     void scaleTwist(geometry_msgs::TwistStamped& twist, double scale) {
         twist.twist.linear.x *= scale;
         twist.twist.linear.y *= scale;
@@ -93,26 +136,6 @@ private:
         // Z stays as is, angular velocities are OK
     }
 
-    // discard any velocity less than a configured minimum
-    void filterNoise(geometry_msgs::TwistStamped& twist, const double& min_value) {
-        if (abs(twist.twist.linear.x) < min_value) {twist.twist.linear.x = 0.0; }
-        if (abs(twist.twist.linear.y) < min_value) {twist.twist.linear.y = 0.0; }
-        if (abs(twist.twist.linear.z) < min_value) {twist.twist.linear.z = 0.0; }
-        if (abs(twist.twist.angular.x) < min_value) {twist.twist.angular.x = 0.0; }
-        if (abs(twist.twist.angular.y) < min_value) {twist.twist.angular.x = 0.0; }
-        if (abs(twist.twist.angular.z) < min_value) {twist.twist.angular.x = 0.0; }
-    }
-
-    // q1 is at time t, q2 is at time t + dt, dt in seconds
-    // from https://mariogc.com/post/angular-velocity-quaternions/ 
-    geometry_msgs::Vector3 quaternionPosesToAngularVelocity(const geometry_msgs::Quaternion& q1, const geometry_msgs::Quaternion& q2, double dt) {        
-        geometry_msgs::Vector3 angular_velocity;
-        angular_velocity.x = (2.0 / dt) * (q1.w * q2.x - q1.x * q2.w - q1.y * q2.z + q1.z * q2.y);
-        angular_velocity.y = (2.0 / dt) * (q1.w * q2.y + q1.x * q2.z - q1.y * q2.w - q1.z * q2.x);
-        angular_velocity.z = (2.0 / dt) * (q1.w * q2.z - q1.x * q2.y + q1.y * q2.x - q1.z * q2.w);
-        return angular_velocity;
-    }
-
     ros::NodeHandle n_;
     ros::Subscriber omni_sub_;
     ros::Subscriber button_sub_;
@@ -124,12 +147,15 @@ private:
     // relates to the config required by this file
     YAML::Node teleop_config_;
 
+    boost::circular_buffer<geometry_msgs::TwistStamped> previous_proposed_twists_;
+
     ros::Time last_processed_time_;
     geometry_msgs::Quaternion last_orientation_;
     bool movement_active_;
 
-    double min_velocity_;
+    double deadband_;
     double movement_scale_;
+    int consecutive_nonzero_;
 };
 
 const std::string OmniStateToTwist::package_name = "ur_to_touch_haptic_teleoperation";
