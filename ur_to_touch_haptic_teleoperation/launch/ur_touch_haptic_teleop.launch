@@ -1,0 +1,16 @@
+
+
+<launch>
+  <arg name="debug" default = "false"/>
+  <arg name="omni_rate" default="1000"/>
+  <arg name="config" default="$(find ur_to_touch_haptic_teleoperation)/config/servo_config.yaml"/>
+  
+<include file="$(find ur_to_touch_haptic_teleoperation)/launch/ur_touch_teleop.launch">
+    <arg name="debug" value="$(arg debug)"/>
+    <arg name="omni_rate" value="$(arg omni_rate)"/>
+    <arg name="config" value="$(arg config)"/>
+</include>
+
+<node name="ur_to_touch_haptic_teleoperation_haptic_node" pkg="ur_to_touch_haptic_teleoperation" type="ur_to_touch_haptic_teleoperation_haptic_node" output="screen" />
+
+</launch>

@@ -4,3 +4,5 @@ deadband : 0.020
 movement_scale : 0.5
 # number of consecutive nonzero messages required for a non-zero velocity 
 consecutive_nonzero : 9
+# What value the force detected on the UR sensor is multiplied by for the Touch
+force_scale : 1

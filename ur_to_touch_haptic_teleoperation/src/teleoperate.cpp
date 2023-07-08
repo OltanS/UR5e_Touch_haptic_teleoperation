@@ -5,7 +5,6 @@
 #include "ros/ros.h"
 #include "ros/package.h"
 
-
 #include "geometry_msgs/TwistStamped.h"
 #include "omni_msgs/OmniState.h"
 #include "omni_msgs/OmniButtonEvent.h"
@@ -159,8 +158,7 @@ private:
 };
 
 const std::string OmniStateToTwist::package_name = "ur_to_touch_haptic_teleoperation";
-int main(int argc, char** argv)
-{
-    ros::init(argc, argv, OmniStateToTwist::package_name);
+int main(int argc, char** argv) {
+    ros::init(argc, argv, OmniStateToTwist::package_name + "_teleop");
     OmniStateToTwist to_twist;
 }

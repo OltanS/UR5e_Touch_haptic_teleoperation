@@ -1,30 +1,18 @@
 
 
 <launch>
-  <!-- The package has 2 examples of converting joystick commands to servo commands.
-       This is the lower-latency C++ example. You can modify it in your own package for
-       your own type of gamepad or joystick.
-       It reduces latency (slightly) compared to spacenav_teleop_tools.launch.
-       We don't plan to accept pull requests for other controller types using this method,
-       because it would be too much to maintain.
-       But, we do plan to accept teleop_tools config files (see spacenav_teleop_tools.launch)
-  
-        TODO: Add UR5 launch and changing its controllers
-        ADD UR5 moveit launch
-  -->
+
   <arg name="debug" default = "false"/>
   <arg name="omni_rate" default="1000"/>
+  <arg name="config" default="$(find ur_to_touch_haptic_teleoperation)/config/servo_config.yaml"/>
   
   <include file="$(find omni_common)/launch/omni_state.launch">
     <arg name="units" value="m"/>
     <arg name="publish_rate" value="$(arg omni_rate)"/>
   </include>
 
-  <arg name="config" default="$(find ur_to_touch_haptic_teleoperation)/config/servo_config.yaml"/>
-
-  <node name="ur_to_touch_haptic_teleoperation_node" pkg="ur_to_touch_haptic_teleoperation" type="ur_to_touch_haptic_teleoperation_node" output="screen" />
+  <node name="ur_to_touch_haptic_teleoperation_teleop_node" pkg="ur_to_touch_haptic_teleoperation" type="ur_to_touch_haptic_teleoperation_teleop_node" output="screen" />
  
-
   <include file="$(find ur_robot_driver)/launch/ur5e_bringup.launch">
         <arg name="debug" value="$(arg debug)"/>
         <arg name="robot_ip" default="192.168.0.100"/>
@@ -37,10 +25,9 @@
   <node name="servo_server" pkg="moveit_servo" type="servo_server" output="screen">
     <rosparam command="load" file="$(arg config)"/>
   </node>
+  
   <include file="$(find custom_ur5e_moveit_config)/launch/my_moveit_launch.launch">
     <arg name="debug" value="$(arg debug)"/>
   </include>
-<!--
--->
 
 </launch>

@@ -22,6 +22,6 @@
 
   <arg name="config" default="$(find ur_to_touch_haptic_teleoperation)/config/servo_config.yaml"/>
 
-  <node name="ur_to_touch_haptic_teleoperation_node" pkg="ur_to_touch_haptic_teleoperation" type="ur_to_touch_haptic_teleoperation_node" output="screen" />
+  <node name="ur_to_touch_haptic_teleoperation_teleop_node" pkg="ur_to_touch_haptic_teleoperation" type="ur_to_touch_haptic_teleoperation_teleop_node" output="screen" />
  
 </launch>
