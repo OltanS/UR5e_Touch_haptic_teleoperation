@@ -36,34 +36,37 @@ private:
     }
 
     void wrenchCallback(const geometry_msgs::WrenchStamped::ConstPtr& msg) {
-        omni_msgs::OmniFeedback feedbackVector;
-        geometry_msgs::Vector3 forceVector;
+        omni_msgs::OmniFeedback feedback_vector;
+        geometry_msgs::Vector3 force_vector;
         // "Lock Position" is not considered for the application
-        geometry_msgs::Vector3 poseVector;
+        geometry_msgs::Vector3 pose_vector;
         // only generate feedback if movement active, otherwise we'll populate
         // the vector with default 0 initialized vectors.
         if (movement_active_) {
-            forceVector = msg->wrench.force;
-            transformForceToTouchFrame(forceVector);
+            force_vector = msg->wrench.force;
+            transformForceToTouchFrame(force_vector);
         }
 
-        feedbackVector.force = forceVector;
-        feedbackVector.position = poseVector;
-        haptic_pub_.publish(feedbackVector);
+        scaleForceVector(force_vector);
+        feedback_vector.force = force_vector;
+        feedback_vector.position = pose_vector;
+        haptic_pub_.publish(feedback_vector);
     }
 
     /*
-    We perform the opposite transformation of the one performed in teleoperate.cpp
-    We once again can transform in more official capacity, but shuffling
-    around a couple values is once again sufficient for this application
+````We transform from the tool frame, where the forces are measured from
+    So not the same transformation as the base.
     */
-    void transformForceToTouchFrame(geometry_msgs::Vector3& forceVector) {
-        double temp_x = forceVector.x;
-        double temp_y = forceVector.y;
+    void transformForceToTouchFrame(geometry_msgs::Vector3& force_vector) {
+        // Negate everything to set the direction of "reaction"
+        force_vector.x *= -1;
+        force_vector.z *= -1;
+    }
 
-        forceVector.x = temp_y;
-        forceVector.y = -temp_x;
-        // Z stays as is
+    void scaleForceVector(geometry_msgs::Vector3& force_vector) {
+        force_vector.x *= force_scale_;
+        force_vector.y *= force_scale_;
+        force_vector.z *= force_scale_;
     }
 
     ros::NodeHandle n_;
