@@ -13,4 +13,7 @@
 
 <node name="ur_to_touch_haptic_teleoperation_haptic_node" pkg="ur_to_touch_haptic_teleoperation" type="ur_to_touch_haptic_teleoperation_haptic_node" output="screen" />
 
+<!-- Zero the force torque sensor -->
+<node pkg="rosservice" type="rosservice" name="ft_zero" args="call --wait /ur_hardware_interface/zero_ftsensor" />
+
 </launch>
